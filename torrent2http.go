@@ -7,7 +7,10 @@ import (
     "time"
     "path"
     "os"
-    // "log"
+    "os/signal"
+    "syscall"
+    "log"
+    "flag"
     "math"
     "encoding/hex"
     "encoding/json"
@@ -44,24 +47,16 @@ func getMaxPiece(pieces libtorrent.Bitfield, startPiece int, endPiece int) int {
     return pieces.Size()
 }
 
-func getBiggestFile(info libtorrent.Torrent_info) libtorrent.File_entry {
+func getBiggestFile(info libtorrent.Torrent_info) (int, libtorrent.File_entry) {
+    idx := 0
     retFile := info.File_at(0)
     for i := 1; i < info.Num_files(); i++ {
         if info.File_at(i).GetSize() > retFile.GetSize() {
+            idx = i
             retFile = info.File_at(i)
         }
     }
-    return retFile
-}
-
-func removeTorrent() {
-    handle := torrentHandle
-    torrentHandle = nil
-    session.Remove_torrent(handle, 1);
-}
-
-func trackTorrentDownload(atp libtorrent.Add_torrent_params) {
-
+    return idx, retFile
 }
 
 func statusHandler(w http.ResponseWriter, r *http.Request) {
@@ -71,6 +66,15 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
     status := torrentHandle.Status()
+
+    maxPiece := 0
+    if (status.GetHas_metadata()) {
+        torrentInfo := torrentHandle.Get_torrent_info()
+        _, servedFile := getBiggestFile(torrentInfo)
+        startPiece, endPiece := getPiecesForFile(servedFile, torrentInfo.Piece_length())
+        maxPiece = getMaxPiece(status.GetPieces(), startPiece, endPiece)
+    }
+
     fmt.Fprint(w, JSONStruct{
         "state": status.GetState(),
         "progress": status.GetProgress(),
@@ -78,74 +82,43 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
         "upload_rate": float32(status.GetUpload_rate()) / 1000,
         "num_peers": status.GetNum_peers(),
         "num_seeds": status.GetNum_seeds(),
+        "max_piece": maxPiece,
     })
 }
 
-func magnetHandler(w http.ResponseWriter, r *http.Request) {
+func fileStreamHandler(w http.ResponseWriter, r *http.Request) {
     if r.Method != "GET" {
         return
     }
 
-    torrent_params := libtorrent.Parse_magnet_uri2(fmt.Sprintf("magnet:?%s", r.URL.RawQuery))
-    torrent_params.SetStorage_mode(libtorrent.Storage_mode_allocate)
-    hash := []byte(torrent_params.GetInfo_hash().To_string())
-    fmt.Println(hex.EncodeToString(hash))
-
-    new_hash := libtorrent.NewBig_number(torrent_params.GetInfo_hash().To_string())
-    fmt.Println(session.Find_torrent(new_hash))
-
-    torrentHandle = session.Add_torrent(torrent_params)
-    torrentHandle.Set_sequential_download(true)
-
-    fmt.Printf("Downloading: %s\n", torrent_params.GetName())
-
-    fmt.Println("Waiting on metadata...")
+    // Make sure we first have metadata
     for torrentHandle.Status().GetHas_metadata() == false {
         time.Sleep(100 * time.Millisecond)
     }
-    fmt.Println("Done.")
 
     torrentInfo := torrentHandle.Get_torrent_info()
-    servedFile := getBiggestFile(torrentInfo)
+    log.Println(torrentInfo)
+    servedFileIdx, servedFile := getBiggestFile(torrentInfo)
+    // servedFileIdx, servedFile := findFileEntry(r.URL.Path)
+    startPiece, endPiece := getPiecesForFile(servedFile, torrentInfo.Piece_length())
 
-    fmt.Printf("Video file is most likely to be: %s\n", servedFile.GetPath())
-    fmt.Printf("Setting files priorities:\n")
+    // torrentHandle.File_priority(servedFileIdx, 6)
     for i := 0; i < torrentInfo.Num_files(); i++ {
-        if torrentInfo.File_at(i).GetPath() != servedFile.GetPath() {
-            fmt.Printf("Setting 0 priority for %s\n", torrentInfo.File_at(i).GetPath())
+        if i == servedFileIdx {
+            torrentHandle.File_priority(i, 6)
+        } else {
             torrentHandle.File_priority(i, 0)
         }
     }
 
-
-    startPiece, endPiece := getPiecesForFile(servedFile, torrentInfo.Piece_length())
-    fmt.Printf("File is located between piece %d and %d\n", startPiece, endPiece)
-
-    //w.Header().Set("Content-Length", fmt.Sprintf("%d", servedFile.GetSize()))
-
-    lastPiece := 0
-    currentPiece := 0
-    pieceLength := torrentInfo.Piece_length()
-    go func () {
-        for torrentHandle != nil {
-            s := torrentHandle.Status();
-
-            fmt.Printf("\r%.2f%% complete (D:%.1fkb/s U:%.1fkB/s P:%d S:%d) Sent pieces: %d/%d",
-                s.GetProgress() * 100,
-                float32(s.GetDownload_rate()) / 1000,
-                float32(s.GetUpload_rate()) / 1000,
-                s.GetNum_peers(),
-                s.GetNum_seeds(),
-                currentPiece, torrentInfo.Num_pieces())
-
-            time.Sleep(1 * time.Second)
-        }
-    }()
-
     fp, _ := os.Open(path.Join(torrentHandle.Save_path(), servedFile.GetPath()))
     defer fp.Close()
 
-    for torrentHandle != nil {
+
+    currentPiece := 0
+    lastPiece := 0
+    pieceLength := torrentInfo.Piece_length()
+    for {
         s := torrentHandle.Status()
         maxPiece := getMaxPiece(s.GetPieces(), startPiece, endPiece)
 
@@ -153,36 +126,117 @@ func magnetHandler(w http.ResponseWriter, r *http.Request) {
             fp.Seek(int64(currentPiece * pieceLength), 0)
             _, err := io.CopyN(w, fp, int64(pieceLength))
             if err != nil {
-                fmt.Println("\nClient disconnected, stopping!")
-                removeTorrent()
+                log.Printf("Client disconnected from %s\n", r.URL.Path)
                 return
             }
         }
         if maxPiece == endPiece {
-            removeTorrent()
             return
         }
         lastPiece = maxPiece
 
-        time.Sleep(100 * time.Millisecond)
+        time.Sleep(10 * time.Millisecond)
     }
 }
 
+func startServices() {
+    log.Println("Starting DHT...")
+    session.Start_dht()
+
+    log.Println("Starting LSD...")
+    session.Start_lsd()
+
+    log.Println("Starting UPNP...")
+    session.Start_upnp()
+
+    log.Println("Starting NATPMP...")
+    session.Start_natpmp()
+}
+
+func stopServices() {
+    log.Println("Stopping DHT...")
+    session.Stop_dht()
+
+    log.Println("Stopping LSD...")
+    session.Stop_lsd()
+
+    log.Println("Stopping UPNP...")
+    session.Stop_upnp()
+
+    log.Println("Stopping NATPMP...")
+    session.Stop_natpmp()
+}
+
+func removeFiles() {
+    if torrentHandle.Status().GetHas_metadata() == false {
+        return
+    }
+
+    torrentInfo := torrentHandle.Get_torrent_info()
+    for i := 0; i < torrentInfo.Num_files(); i++ {
+        os.RemoveAll(path.Join(torrentHandle.Save_path(), torrentInfo.File_at(i).GetPath()))
+    }
+}
+
+func cleanup() {
+    stopServices()
+
+    log.Println("Removing torrent...")
+    session.Set_alert_mask(libtorrent.AlertStorage_notification)
+
+    // Just in case
+    defer removeFiles()
+    session.Remove_torrent(torrentHandle, 1);
+
+    log.Println("Waiting for files to be removed...")
+    for {
+        if session.Wait_for_alert(libtorrent.Seconds(30)).Swigcptr() == 0 {
+            return
+        }
+        if session.Pop_alert2().What() == "cache_flushed_alert" {
+            return
+        }
+    }
+}
 
 func main() {
-    fmt.Println("Starting BT engine...")
+    log.Println("Starting BT engine...")
     session = libtorrent.NewSession()
     session.Listen_on(libtorrent.NewPair_int_int(6881, 6891))
-    session.Start_dht()
+
+    log.Println("Setting Session settings...")
     sessionSettings := session.Settings()
     sessionSettings.SetConnection_speed(500)
     sessionSettings.SetRequest_timeout(3)
     sessionSettings.SetPeer_connect_timeout(3)
     session.Set_settings(sessionSettings)
-    fmt.Println("Started BT engine.")
 
-    http.HandleFunc("/magnet:", magnetHandler)
+    startServices()
+
+    magnetUri := flag.String("magnet", "", "Magnet URI of Torrent")
+    flag.Parse()
+
+    torrentParams := libtorrent.Parse_magnet_uri2(*magnetUri)
+    torrentHash := []byte(torrentParams.GetInfo_hash().To_string())
+    torrentParams.SetStorage_mode(libtorrent.Storage_mode_allocate)
+    torrentHandle = session.Add_torrent(torrentParams)
+    torrentHandle.Set_sequential_download(true)
+    log.Printf("Downloading: %s (%s)\n", torrentParams.GetName(), hex.EncodeToString(torrentHash))
+
+    log.Println("Registering HTTP endpoints...")
     http.HandleFunc("/status", statusHandler)
-    fmt.Println("Listening HTTP on port 5000")
+    http.HandleFunc("/file", fileStreamHandler)
+
+    c := make(chan os.Signal, 1)
+    signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+    go func(){
+        <-c
+        log.Println("Stopping torrent2http...")
+        cleanup()
+        log.Println("Bye bye")
+        os.Exit(0)
+    }()
+
+    log.Println("Listening HTTP on port 5000...")
     http.ListenAndServe(":5000", nil)
 }
