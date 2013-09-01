@@ -68,11 +68,13 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
     status := torrentHandle.Status()
 
     maxPiece := 0
+    totalPieces := 0
     if (status.GetHas_metadata()) {
         torrentInfo := torrentHandle.Get_torrent_info()
         _, servedFile := getBiggestFile(torrentInfo)
         startPiece, endPiece := getPiecesForFile(servedFile, torrentInfo.Piece_length())
         maxPiece = getMaxPiece(status.GetPieces(), startPiece, endPiece)
+        totalPieces = endPiece - startPiece
     }
 
     fmt.Fprint(w, JSONStruct{
@@ -83,6 +85,7 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
         "num_peers": status.GetNum_peers(),
         "num_seeds": status.GetNum_seeds(),
         "max_piece": maxPiece,
+        "total_pieces": totalPieces,
     })
 }
 
