@@ -220,33 +220,58 @@ func main() {
 
     log.Println("Starting BT engine...")
     session = libtorrent.NewSession()
+
     session.Listen_on(libtorrent.NewPair_int_int(6881, 6891))
 
     log.Println("Setting Session settings...")
     sessionSettings := session.Settings()
-    sessionSettings.SetConnection_speed(500)
-    sessionSettings.SetRequest_timeout(3)
-    sessionSettings.SetPeer_connect_timeout(3)
+    sessionSettings.SetConnection_speed(1000)
+    sessionSettings.SetRequest_timeout(1)
+    sessionSettings.SetPeer_connect_timeout(1)
     session.Set_settings(sessionSettings)
 
     startServices()
 
-    magnetUri := flag.String("magnet", "", "Magnet URI of Torrent")
-    flag.Parse()
-
-    torrentParams := libtorrent.Parse_magnet_uri2(*magnetUri)
+    torrentParams := libtorrent.Parse_magnet_uri2(magnetUri)
     torrentHash := []byte(torrentParams.GetInfo_hash().To_string())
     torrentParams.SetStorage_mode(libtorrent.Storage_mode_allocate)
     torrentHandle = session.Add_torrent(torrentParams)
     torrentHandle.Set_sequential_download(true)
     log.Printf("Downloading: %s (%s)\n", torrentParams.GetName(), hex.EncodeToString(torrentHash))
 
+
+    go func() {
+        for torrentHandle.Status().GetHas_metadata() == false {
+            time.Sleep(100 * time.Millisecond)
+        }
+
+        torrentInfo := torrentHandle.Get_torrent_info()
+        servedFileIdx, servedFile := getBiggestFile(torrentInfo)
+        startPiece, _ := getPiecesForFile(servedFile, torrentInfo.Piece_length())
+
+        log.Printf("Setting priority 7 for piece %d\n", startPiece)
+        torrentHandle.Piece_priority(startPiece, 7)
+        for i := 0; i < torrentInfo.Num_files(); i++ {
+            if i == servedFileIdx {
+                torrentHandle.File_priority(i, 6)
+            } else {
+                torrentHandle.File_priority(i, 0)
+            }
+        }
+    }()
+
+
     log.Println("Registering HTTP endpoints...")
     http.HandleFunc("/status", statusHandler)
     http.HandleFunc("/file", fileStreamHandler)
 
+    // Shutdown procedures
     c := make(chan os.Signal, 1)
     signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+    // Allow shutdown via HTTP
+    http.HandleFunc("/shutdown", func (w http.ResponseWriter, r *http.Request) {
+        c <- os.Interrupt
+    })
     go func(){
         <-c
         log.Println("Stopping torrent2http...")
@@ -255,6 +280,6 @@ func main() {
         os.Exit(0)
     }()
 
-    log.Println("Listening HTTP on port 5000...")
-    http.ListenAndServe(":5000", nil)
+    log.Printf("Listening HTTP on %s...\n", bindAddress)
+    http.ListenAndServe(bindAddress, nil)
 }
