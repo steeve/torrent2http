@@ -1,36 +1,44 @@
 NAME = torrent2http
+GO = go
 
-LIBTORRENT_CFLAGS := $(shell pkg-config --cflags libtorrent-rasterbar)
-LIBTORRENT_LIBS := $(shell pkg-config --libs libtorrent-rasterbar)
-LIBTORRENT_GO_SONAME := github.com-steeve-libtorrent-go-libtorrent-swigcxx.so
+include Platform.inc
 
-HOMEBREW_DYLIB_PATH := /usr/local/lib
-LIBTORRENT_DYLIB := libtorrent-rasterbar.7.dylib
-LIBBOOST_DYLIB := libboost_system-mt.dylib
+ifeq ($(OS),Windows_NT)
+	EXT = .exe
+endif
 
-CFLAGS := $(LIBTORRENT_CFLAGS) -Wno-deprecated -Wno-deprecated-declarations
-LDFLAGS := $(LIBTORRENT_LIBS)
-SWIG_FEATURES := $(LIBTORRENT_CFLAGS) -I/usr/local/include
+OUTPUT_NAME = $(NAME)$(EXT)
+BUILD_PATH = build/$(OS)_$(ARCH)
 
-# Unfortunately I haven't found another way to give my flags to GCC when building
-# through SWIG + Go.
-CC := gcc $(CFLAGS) $(LDFLAGS)
+all: libtorrent-go build
 
-OS := $(shell uname)
+libtorrent-go: force
+	cd libtorrent-go && $(MAKE) $(MFLAGS)
 
-all: build fix_libs
+run: build
+ifeq ($(OS),Linux)
+	LD_LIBRARY_PATH=$(BUILD_PATH):$$LD_LIBRARY_PATH $(BUILD_PATH)/$(OUTPUT_NAME)
+endif
+ifeq ($(OS),Darwin)
+	DYLD_LIBRARY_PATH=$(BUILD_PATH):$$DYLD_LIBRARY_PATH $(BUILD_PATH)/$(OUTPUT_NAME)
+endif
 
-build:
-	CC="$(CC)" SWIG_FEATURES="$(SWIG_FEATURES)" go build -v -x $(NAME).go
+force:
+	true
 
-fix_libs:
-	# Copy the .so file here
-	cp $(shell go env GOPATH)/src/github.com/steeve/libtorrent-go/$(LIBTORRENT_GO_SONAME) .
-	# Make sure it uses local libtorrent
-	install_name_tool -change $(HOMEBREW_DYLIB_PATH)/$(LIBTORRENT_DYLIB) @executable_path/$(LIBTORRENT_DYLIB) $(LIBTORRENT_GO_SONAME)
+re: clean all
 
-	# Make sure local libtorrent uses local boost
-	cp $(HOMEBREW_DYLIB_PATH)/$(LIBBOOST_DYLIB) .
-	cp $(HOMEBREW_DYLIB_PATH)/$(LIBTORRENT_DYLIB) .
-	chmod +w $(LIBBOOST_DYLIB) $(LIBTORRENT_DYLIB)
-	install_name_tool -change $(HOMEBREW_DYLIB_PATH)/$(LIBBOOST_DYLIB) @executable_path/$(LIBBOOST_DYLIB) $(LIBTORRENT_DYLIB)
+$(BUILD_PATH):
+	mkdir -p $(BUILD_PATH)
+
+build: $(BUILD_PATH) force
+	$(GO) build -v -x -o $(BUILD_PATH)/$(OUTPUT_NAME)
+
+package: build
+	cp -f ./libtorrent-go/$(BUILD_PATH)/* $(BUILD_PATH)
+
+clean:
+	rm -rf $(BUILD_PATH)
+
+distclean:
+	rm -rf build
