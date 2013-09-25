@@ -31,6 +31,8 @@ func (r JSONStruct) String() (s string) {
 
 var session libtorrent.Session
 var torrentHandle libtorrent.Torrent_handle
+var magnetUri string
+var bindAddress string
 
 func getPiecesForFile(f libtorrent.File_entry, pieceLength int) (int, int) {
     startPiece := int(f.GetOffset()) / pieceLength
@@ -202,7 +204,20 @@ func cleanup() {
     }
 }
 
+func parseFlags() {
+    flag.StringVar(&magnetUri, "magnet", "", "Magnet URI of Torrent")
+    flag.StringVar(&bindAddress, "bind", ":5001", "Bind address of torrent2http2")
+    flag.Parse()
+
+    if magnetUri == "" {
+        flag.Usage();
+        os.Exit(1)
+    }
+}
+
 func main() {
+    parseFlags()
+
     log.Println("Starting BT engine...")
     session = libtorrent.NewSession()
     session.Listen_on(libtorrent.NewPair_int_int(6881, 6891))
