@@ -14,7 +14,7 @@ import (
     "math"
     "encoding/hex"
     "encoding/json"
-    "github.com/steeve/libtorrent-go"
+    "./libtorrent-go"
 )
 
 type JSONStruct map[string]interface{}
