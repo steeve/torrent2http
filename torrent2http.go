@@ -107,7 +107,7 @@ func fileStreamHandler(w http.ResponseWriter, r *http.Request) {
     // servedFileIdx, servedFile := findFileEntry(r.URL.Path)
     startPiece, endPiece := getPiecesForFile(servedFile, torrentInfo.Piece_length())
 
-    // torrentHandle.File_priority(servedFileIdx, 6)
+    torrentHandle.Piece_priority(servedFileIdx, 6)
     for i := 0; i < torrentInfo.Num_files(); i++ {
         if i == servedFileIdx {
             torrentHandle.File_priority(i, 6)
