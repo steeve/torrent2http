@@ -12,7 +12,6 @@ import (
     "log"
     "flag"
     "math"
-    "encoding/hex"
     "encoding/json"
     "./libtorrent-go"
 )
@@ -245,11 +244,9 @@ func main() {
     startServices()
 
     torrentParams := libtorrent.Parse_magnet_uri2(magnetUri)
-    torrentHash := []byte(torrentParams.GetInfo_hash().To_string())
-    torrentParams.SetStorage_mode(libtorrent.Storage_mode_allocate)
     torrentHandle = session.Add_torrent(torrentParams)
     torrentHandle.Set_sequential_download(true)
-    log.Printf("Downloading: %s (%s)\n", torrentParams.GetName(), hex.EncodeToString(torrentHash))
+    log.Printf("Downloading: %s\n", torrentParams.GetName())
 
 
     go func() {
