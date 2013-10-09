@@ -34,9 +34,21 @@ var torrentHandle libtorrent.Torrent_handle
 var magnetUri string
 var bindAddress string
 
+func getOffset(f libtorrent.File_entry) int64 {
+    var ret int64
+    f.Get_offset2(&ret)
+    return ret
+}
+
+func getSize(f libtorrent.File_entry) int64 {
+    var ret int64
+    f.Get_size2(&ret)
+    return ret
+}
+
 func getPiecesForFile(f libtorrent.File_entry, pieceLength int) (int, int) {
-    startPiece := int(f.GetOffset()) / pieceLength
-    totalPieces := int(math.Ceil(float64(f.GetSize()) / float64(pieceLength)))
+    startPiece := int(getOffset(f)) / pieceLength
+    totalPieces := int(math.Ceil(float64(getSize(f)) / float64(pieceLength)))
     return startPiece, startPiece + totalPieces
 }
 
@@ -46,14 +58,14 @@ func getMaxPiece(pieces libtorrent.Bitfield, startPiece int, endPiece int) int {
             return i
         }
     }
-    return pieces.Size()
+    return int(pieces.Size())
 }
 
 func getBiggestFile(info libtorrent.Torrent_info) (int, libtorrent.File_entry) {
     idx := 0
     retFile := info.File_at(0)
     for i := 1; i < info.Num_files(); i++ {
-        if info.File_at(i).GetSize() > retFile.GetSize() {
+        if getSize(info.File_at(i)) > getSize(retFile) {
             idx = i
             retFile = info.File_at(i)
         }
