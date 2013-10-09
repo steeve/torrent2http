@@ -1,16 +1,51 @@
 NAME = torrent2http
+CC = gcc
 GO = go
 
-include Platform.inc
+include OS.inc
+ifeq ($(OS),Darwin)
+	# clang on OS X
+	CC = clang
+	CXX = clang++
+endif
+ifneq ($(CROSS_PREFIX),)
+	CC := $(CROSS_PREFIX)-$(CC)
+	CXX := $(CROSS_PREFIX)-$(CXX)
+endif
+include Arch.inc
+
+ifeq ($(ARCH),x86)
+	GOARCH = 386
+endif
+ifeq ($(ARCH),x86_64)
+	GOARCH = amd64
+endif
+ifeq ($(ARCH),arm)
+	GOARCH = arm
+	GOARM = 6
+endif
 
 ifeq ($(OS),Windows_NT)
 	EXT = .exe
+	GOOS = windows
+endif
+ifeq ($(OS),Darwin)
+	EXT =
+	GOOS = darwin
+endif
+ifeq ($(OS),Linux)
+	EXT =
+	GOOS = linux
 endif
 
+
+CGO_ENABLED = 1
 OUTPUT_NAME = $(NAME)$(EXT)
 BUILD_PATH = build/$(OS)_$(ARCH)
 
-all: libtorrent-go build
+all: package
+
+re: clean all
 
 libtorrent-go: force
 	cd libtorrent-go && $(MAKE) $(MFLAGS)
@@ -26,18 +61,17 @@ endif
 force:
 	true
 
-re: clean all
-
 $(BUILD_PATH):
 	mkdir -p $(BUILD_PATH)
 
-build: $(BUILD_PATH) force
-	$(GO) build -v -x -o $(BUILD_PATH)/$(OUTPUT_NAME)
+build: $(BUILD_PATH) libtorrent-go force
+	CC=$(CC) GOOS=$(GOOS) GOARCH=$(GOARCH) GOARM=$(GOARM) CGO_ENABLED=$(CGO_ENABLED) $(GO) build -v -o $(BUILD_PATH)/$(OUTPUT_NAME) -ldflags="-extld=$(CC)"
 
 package: build
-	cp -f ./libtorrent-go/$(BUILD_PATH)/* $(BUILD_PATH)
+	find ./libtorrent-go/$(BUILD_PATH)/bin/ -type f -exec cp {} $(BUILD_PATH) \;
 
 clean:
+	cd libtorrent-go && $(MAKE) $(MFLAGS) clean
 	rm -rf $(BUILD_PATH)
 
 distclean:
