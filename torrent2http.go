@@ -2,9 +2,7 @@ package main
 
 import (
     "fmt"
-    "io"
     "net/http"
-    "time"
     "path"
     "os"
     "os/signal"
@@ -28,49 +26,20 @@ func (r JSONStruct) String() (s string) {
     return
 }
 
+type Config struct {
+    magnetUri string
+    bindAddress string
+    upload_rate int
+    download_rate int
+    download_path string
+    keep_downloaded_file bool
+}
+
 var session libtorrent.Session
 var torrentHandle libtorrent.Torrent_handle
 var magnetUri string
 var bindAddress string
-
-func getOffset(f libtorrent.File_entry) int64 {
-    var ret int64
-    f.Get_offset2(&ret)
-    return ret
-}
-
-func getSize(f libtorrent.File_entry) int64 {
-    var ret int64
-    f.Get_size2(&ret)
-    return ret
-}
-
-func getPiecesForFile(f libtorrent.File_entry, pieceLength int) (int, int) {
-    startPiece := int(getOffset(f)) / pieceLength
-    totalPieces := int(math.Ceil(float64(getSize(f)) / float64(pieceLength)))
-    return startPiece, startPiece + totalPieces
-}
-
-func getMaxPiece(pieces libtorrent.Bitfield, startPiece int, endPiece int) int {
-    for i := startPiece; i <= endPiece; i++ {
-        if pieces.Get_bit(i) == false {
-            return i
-        }
-    }
-    return int(pieces.Size())
-}
-
-func getBiggestFile(info libtorrent.Torrent_info) (int, libtorrent.File_entry) {
-    idx := 0
-    retFile := info.File_at(0)
-    for i := 1; i < info.Num_files(); i++ {
-        if getSize(info.File_at(i)) > getSize(retFile) {
-            idx = i
-            retFile = info.File_at(i)
-        }
-    }
-    return idx, retFile
-}
+var tfs *TorrentFS
 
 func statusHandler(w http.ResponseWriter, r *http.Request) {
     w.Header().Set("Content-Type", "application/json")
@@ -80,79 +49,32 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
     }
     status := torrentHandle.Status()
 
-    maxPiece := 0
-    totalPieces := 0
-    if (status.GetHas_metadata()) {
-        torrentInfo := torrentHandle.Get_torrent_info()
-        _, servedFile := getBiggestFile(torrentInfo)
-        startPiece, endPiece := getPiecesForFile(servedFile, torrentInfo.Piece_length())
-        maxPiece = getMaxPiece(status.GetPieces(), startPiece, endPiece)
-        totalPieces = endPiece - startPiece
-    }
-
     fmt.Fprint(w, JSONStruct{
         "state": status.GetState(),
         "progress": status.GetProgress(),
         "download_rate": float32(status.GetDownload_rate()) / 1000,
         "upload_rate": float32(status.GetUpload_rate()) / 1000,
         "num_peers": status.GetNum_peers(),
-        "num_seeds": status.GetNum_seeds(),
-        "max_piece": maxPiece,
-        "total_pieces": totalPieces,
-    })
+        "num_seeds": status.GetNum_seeds()})
 }
 
-func fileStreamHandler(w http.ResponseWriter, r *http.Request) {
-    if r.Method != "GET" {
-        return
+func lsHandler(w http.ResponseWriter, r *http.Request) {
+    w.Header().Set("Content-Type", "application/json")
+
+    dir, _ := tfs.TFSOpen("/")
+    files, _ := dir.TFSReaddir(-1)
+    retFiles := make([]JSONStruct, len(files))
+    for i, file := range files {
+        startPiece, endPiece := file.Pieces()
+        retFiles[i] = JSONStruct{
+            "name": file.Name(),
+            "size": file.Size(),
+            "offset": file.Offset(),
+            "total_pieces": int(math.Max(float64(endPiece - startPiece), 1)),
+            "complete_pieces": file.CompletedPieces()}
     }
 
-    // Make sure we first have metadata
-    for torrentHandle.Status().GetHas_metadata() == false {
-        time.Sleep(100 * time.Millisecond)
-    }
-
-    torrentInfo := torrentHandle.Get_torrent_info()
-    log.Println(torrentInfo)
-    servedFileIdx, servedFile := getBiggestFile(torrentInfo)
-    // servedFileIdx, servedFile := findFileEntry(r.URL.Path)
-    startPiece, endPiece := getPiecesForFile(servedFile, torrentInfo.Piece_length())
-
-    torrentHandle.Piece_priority(servedFileIdx, 6)
-    for i := 0; i < torrentInfo.Num_files(); i++ {
-        if i == servedFileIdx {
-            torrentHandle.File_priority(i, 6)
-        } else {
-            torrentHandle.File_priority(i, 0)
-        }
-    }
-
-    fp, _ := os.Open(path.Join(torrentHandle.Save_path(), servedFile.GetPath()))
-    defer fp.Close()
-
-
-    currentPiece := 0
-    lastPiece := 0
-    pieceLength := torrentInfo.Piece_length()
-    for {
-        s := torrentHandle.Status()
-        maxPiece := getMaxPiece(s.GetPieces(), startPiece, endPiece)
-
-        for currentPiece = lastPiece; currentPiece < maxPiece; currentPiece++ {
-            fp.Seek(int64(currentPiece * pieceLength), 0)
-            _, err := io.CopyN(w, fp, int64(pieceLength))
-            if err != nil {
-                log.Printf("Client disconnected from %s\n", r.URL.Path)
-                return
-            }
-        }
-        if maxPiece == endPiece {
-            return
-        }
-        lastPiece = maxPiece
-
-        time.Sleep(10 * time.Millisecond)
-    }
+    fmt.Fprint(w, JSONStruct{"files": retFiles})
 }
 
 func startServices() {
@@ -241,38 +163,25 @@ func main() {
     sessionSettings.SetPeer_connect_timeout(1)
     session.Set_settings(sessionSettings)
 
+    // session.SetUpload_rate_limit(80 * 1024)
+
+    // session.Set_settings(getSettings())
+
     startServices()
 
     torrentParams := libtorrent.Parse_magnet_uri2(magnetUri)
+    // torrentParams.SetSave_path("/tmp")
     torrentHandle = session.Add_torrent(torrentParams)
     torrentHandle.Set_sequential_download(true)
     log.Printf("Downloading: %s\n", torrentParams.GetName())
 
-
-    go func() {
-        for torrentHandle.Status().GetHas_metadata() == false {
-            time.Sleep(100 * time.Millisecond)
-        }
-
-        torrentInfo := torrentHandle.Get_torrent_info()
-        servedFileIdx, servedFile := getBiggestFile(torrentInfo)
-        startPiece, _ := getPiecesForFile(servedFile, torrentInfo.Piece_length())
-
-        log.Printf("Setting priority 7 for piece %d\n", startPiece)
-        torrentHandle.Piece_priority(startPiece, 7)
-        for i := 0; i < torrentInfo.Num_files(); i++ {
-            if i == servedFileIdx {
-                torrentHandle.File_priority(i, 6)
-            } else {
-                torrentHandle.File_priority(i, 0)
-            }
-        }
-    }()
-
+    tfs = NewTorrentFS(torrentHandle)
 
     log.Println("Registering HTTP endpoints...")
     http.HandleFunc("/status", statusHandler)
-    http.HandleFunc("/file", fileStreamHandler)
+    http.HandleFunc("/ls", lsHandler)
+    http.Handle("/files/", http.StripPrefix("/files/", http.FileServer(tfs)))
+    http.Handle("/files_real/", http.StripPrefix("/files_real/", http.FileServer(http.Dir("."))))
 
     // Shutdown procedures
     c := make(chan os.Signal, 1)
