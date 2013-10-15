@@ -32,7 +32,7 @@ type Config struct {
     max_upload_rate     int
     max_download_rate   int
     download_path       string
-    keep_file           bool
+    keep_files          bool
     min_memory_mode     bool
 }
 
@@ -121,7 +121,7 @@ func cleanup() {
 
     log.Println("Removing torrent...")
 
-    if config.keep_file == true {
+    if config.keep_files == true {
         return
     }
 
@@ -147,7 +147,7 @@ func parseFlags() {
     flag.IntVar(&config.max_download_rate, "dlrate", 0, "Max Download Rate")
     flag.IntVar(&config.max_upload_rate, "ulrate", 0, "Max Upload Rate")
     flag.StringVar(&config.download_path, "dlpath", ".", "Download path")
-    flag.BoolVar(&config.keep_file, "keep", false, "Keep files after exiting")
+    flag.BoolVar(&config.keep_files, "keep", false, "Keep files after exiting")
     flag.BoolVar(&config.min_memory_mode, "minmem", false, "Min memory mode (for embedded platforms such as Raspberry Pi)")
     flag.Parse()
 
