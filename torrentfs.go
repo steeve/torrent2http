@@ -142,7 +142,7 @@ func (tf *TorrentFile) TFSReaddir(count int) (files []*TorrentFile, err error) {
     totalFiles := tf.tfs.ti.Num_files()
     files = make([]*TorrentFile, totalFiles - tf.dirFp)
     for ; tf.dirFp < totalFiles; tf.dirFp++ {
-        files[tf.dirFp], err = NewTorrentFile(tf.tfs, tf.tfs.ti.File_at(tf.dirFp).GetPath())
+        files[tf.dirFp], err = NewTorrentFile(tf.tfs, path.Join(path.Join(tf.tfs.th.Save_path(), tf.tfs.ti.File_at(tf.dirFp).GetPath())))
     }
     return
 }
