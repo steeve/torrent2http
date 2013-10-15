@@ -141,14 +141,99 @@ func cleanup() {
 }
 
 func parseFlags() {
-    flag.StringVar(&magnetUri, "magnet", "", "Magnet URI of Torrent")
-    flag.StringVar(&bindAddress, "bind", ":5001", "Bind address of torrent2http2")
+    config = Config{}
+    flag.StringVar(&config.magnetUri, "magnet", "", "Magnet URI")
+    flag.StringVar(&config.bindAddress, "bind", ":5001", "Bind address of torrent2http2")
+    flag.IntVar(&config.max_download_rate, "dlrate", 0, "Max Download Rate")
+    flag.IntVar(&config.max_upload_rate, "ulrate", 0, "Max Upload Rate")
+    flag.StringVar(&config.download_path, "dlpath", ".", "Download path")
+    flag.BoolVar(&config.keep_file, "keep", false, "Keep files after exiting")
+    flag.BoolVar(&config.min_memory_mode, "minmem", false, "Min memory mode (for embedded platforms such as Raspberry Pi)")
     flag.Parse()
 
-    if magnetUri == "" {
+    if config.magnetUri == "" {
         flag.Usage();
         os.Exit(1)
     }
+}
+
+// Go version of libtorrent.Min_memory_usage in case we need to tweak
+func getMimMemorySettings() libtorrent.Session_settings {
+    set := session.Settings()
+
+    set.SetAlert_queue_size(100);
+
+    // setting this to a low limit, means more
+    // peers are more likely to request from the
+    // same piece. Which means fewer partial
+    // pieces and fewer entries in the partial
+    // piece list
+    set.SetWhole_pieces_threshold(2)
+    set.SetUse_parole_mode(false)
+    set.SetPrioritize_partial_pieces(true)
+
+    // connect to 5 peers per second
+    set.SetConnection_speed(5)
+
+    // be extra nice on the hard drive when running
+    // on embedded devices. This might slow down
+    // torrent checking
+    set.SetFile_checks_delay_per_block(5)
+
+    // only have 4 files open at a time
+    set.SetFile_pool_size(4)
+
+    // we want to keep the peer list as small as possible
+    set.SetAllow_multiple_connections_per_ip(false)
+    set.SetMax_failcount(2)
+    set.SetInactivity_timeout(120)
+
+    // whenever a peer has downloaded one block, write
+    // it to disk, and don't read anything from the
+    // socket until the disk write is complete
+    set.SetMax_queued_disk_bytes(1)
+
+//===================================================================
+
+    // don't keep track of all upnp devices, keep
+    // the device list small
+    set.SetUpnp_ignore_nonrouters(true)
+
+    // never keep more than one 16kB block in
+    // the send buffer
+    set.SetSend_buffer_watermark(9)
+
+    // don't use any disk cache
+    // set.SetCache_size(0)
+    // set.SetCache_buffer_chunk_size(1)
+    // set.SetUse_read_cache(false)
+    // set.SetUse_disk_read_ahead(false)
+
+    set.SetClose_redundant_connections(true)
+
+    set.SetMax_peerlist_size(500)
+    set.SetMax_paused_peerlist_size(50)
+
+    // udp trackers are cheaper to talk to
+    set.SetPrefer_udp_trackers(true)
+
+    set.SetMax_rejects(10)
+
+    set.SetRecv_socket_buffer_size(16 * 1024)
+    set.SetSend_socket_buffer_size(16 * 1024)
+
+    // use less memory when checking pieces
+    // set.SetOptimize_hashing_for_speed(false)
+
+    // use less memory when reading and writing
+    // whole pieces
+    set.SetCoalesce_reads(false)
+    set.SetCoalesce_writes(false)
+
+    // disallow the buffer size to grow for the uTP socket
+    set.SetUtp_dynamic_sock_buf(false)
+
+    return set
 }
 
 func main() {
