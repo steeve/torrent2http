@@ -109,27 +109,6 @@ func (tf *TorrentFile) ensureFp() {
     }
 }
 
-func (tf *TorrentFile) ensurePiecePriorities() {
-    // startPiece, endPiece := tf.Pieces()
-    // log.Printf("Setting priority 7 for pieces %d and %d\n", startPiece, endPiece)
-
-    // tf.tfs.th.Piece_priority(startPiece, 7)
-    // tf.tfs.th.Piece_priority(endPiece, 7)
-
-    // for piece := startPiece + 1; piece < endPiece; piece++ {
-    //     tf.tfs.th.Piece_priority(piece, 0)
-    // }
-
-    // for i := 0; i < tf.tfs.ti.Num_files(); i++ {
-    //     fe := tf.tfs.ti.File_at(i)
-    //     if fe.GetPath() == tf.fe.GetPath() {
-    //         torrentHandle.File_priority(i, 6)
-    //     } else {
-    //         torrentHandle.File_priority(i, 0)
-    //     }
-    // }
-}
-
 func (tf *TorrentFile) Close() error {
     return tf.fp.Close()
 }
