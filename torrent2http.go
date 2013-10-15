@@ -27,18 +27,18 @@ func (r JSONStruct) String() (s string) {
 }
 
 type Config struct {
-    magnetUri string
-    bindAddress string
-    upload_rate int
-    download_rate int
-    download_path string
-    keep_downloaded_file bool
+    magnetUri           string
+    bindAddress         string
+    max_upload_rate     int
+    max_download_rate   int
+    download_path       string
+    keep_file           bool
+    min_memory_mode     bool
 }
 
+var config Config
 var session libtorrent.Session
 var torrentHandle libtorrent.Torrent_handle
-var magnetUri string
-var bindAddress string
 var tfs *TorrentFS
 
 func statusHandler(w http.ResponseWriter, r *http.Request) {
@@ -120,12 +120,15 @@ func cleanup() {
     stopServices()
 
     log.Println("Removing torrent...")
-    session.Set_alert_mask(libtorrent.AlertStorage_notification)
 
+    if config.keep_file == true {
+        return
+    }
+
+    session.Set_alert_mask(libtorrent.AlertStorage_notification)
     // Just in case
     defer removeFiles()
     session.Remove_torrent(torrentHandle, 1);
-
     log.Println("Waiting for files to be removed...")
     for {
         if session.Wait_for_alert(libtorrent.Seconds(30)).Swigcptr() == 0 {
@@ -158,19 +161,25 @@ func main() {
 
     log.Println("Setting Session settings...")
     sessionSettings := session.Settings()
+    if config.min_memory_mode == true {
+        sessionSettings = libtorrent.Min_memory_usage()
+        sessionSettings.SetMax_queued_disk_bytes(64 * 1024)
+    }
     sessionSettings.SetConnection_speed(1000)
     sessionSettings.SetRequest_timeout(1)
     sessionSettings.SetPeer_connect_timeout(1)
+    if config.max_download_rate > 0 {
+        sessionSettings.SetDownload_rate_limit(80 * 1024)
+    }
+    if config.max_upload_rate > 0 {
+        sessionSettings.SetUpload_rate_limit(config.max_upload_rate * 1024)
+    }
     session.Set_settings(sessionSettings)
-
-    // session.SetUpload_rate_limit(80 * 1024)
-
-    // session.Set_settings(getSettings())
 
     startServices()
 
-    torrentParams := libtorrent.Parse_magnet_uri2(magnetUri)
-    // torrentParams.SetSave_path("/tmp")
+    torrentParams := libtorrent.Parse_magnet_uri2(config.magnetUri)
+    torrentParams.SetSave_path(config.download_path)
     torrentHandle = session.Add_torrent(torrentParams)
     torrentHandle.Set_sequential_download(true)
     log.Printf("Downloading: %s\n", torrentParams.GetName())
@@ -181,7 +190,6 @@ func main() {
     http.HandleFunc("/status", statusHandler)
     http.HandleFunc("/ls", lsHandler)
     http.Handle("/files/", http.StripPrefix("/files/", http.FileServer(tfs)))
-    http.Handle("/files_real/", http.StripPrefix("/files_real/", http.FileServer(http.Dir("."))))
 
     // Shutdown procedures
     c := make(chan os.Signal, 1)
@@ -198,6 +206,6 @@ func main() {
         os.Exit(0)
     }()
 
-    log.Printf("Listening HTTP on %s...\n", bindAddress)
-    http.ListenAndServe(bindAddress, nil)
+    log.Printf("Listening HTTP on %s...\n", config.bindAddress)
+    http.ListenAndServe(config.bindAddress, nil)
 }
