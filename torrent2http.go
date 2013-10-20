@@ -143,7 +143,7 @@ func cleanup() {
 func parseFlags() {
     config = Config{}
     flag.StringVar(&config.magnetUri, "magnet", "", "Magnet URI")
-    flag.StringVar(&config.bindAddress, "bind", ":5001", "Bind address of torrent2http2")
+    flag.StringVar(&config.bindAddress, "bind", ":5001", "Bind address of torrent2http")
     flag.IntVar(&config.max_download_rate, "dlrate", 0, "Max Download Rate")
     flag.IntVar(&config.max_upload_rate, "ulrate", 0, "Max Upload Rate")
     flag.StringVar(&config.download_path, "dlpath", ".", "Download path")
