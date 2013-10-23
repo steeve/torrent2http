@@ -83,7 +83,6 @@ distclean:
 	rm -rf build
 
 
-.INTERMEDIATE: addon.xml
 addon.xml:
 	sed s/\$$VERSION/$(VERSION)/g < addon.xml.tpl > $@
 
