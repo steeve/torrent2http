@@ -244,7 +244,7 @@ func main() {
     log.Println("Starting BT engine...")
     session = libtorrent.NewSession()
 
-    session.Listen_on(libtorrent.NewPair_int_int(6881, 6891))
+    session.Listen_on(libtorrent.NewPair_int_int(6900, 6999))
 
     log.Println("Setting Session settings...")
     sessionSettings := session.Settings()
