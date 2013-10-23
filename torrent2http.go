@@ -34,6 +34,7 @@ type Config struct {
     download_path       string
     keep_files          bool
     min_memory_mode     bool
+    encryption          int
 }
 
 var config Config
@@ -149,6 +150,7 @@ func parseFlags() {
     flag.StringVar(&config.download_path, "dlpath", ".", "Download path")
     flag.BoolVar(&config.keep_files, "keep", false, "Keep files after exiting")
     flag.BoolVar(&config.min_memory_mode, "minmem", false, "Min memory mode (for embedded platforms such as Raspberry Pi)")
+    flag.IntVar(&config.encryption, "encryption", 1, "Encryption: 0=forced 1=enabled (default) 2=disabled")
     flag.Parse()
 
     if config.magnetUri == "" {
@@ -260,6 +262,14 @@ func main() {
         sessionSettings.SetUpload_rate_limit(config.max_upload_rate * 1024)
     }
     session.Set_settings(sessionSettings)
+
+    // Set encryption settings
+    encryptionSettings := libtorrent.NewPe_settings()
+    encryptionSettings.SetOut_enc_policy(libtorrent.LibtorrentPe_settingsEnc_policy(config.encryption))
+    encryptionSettings.SetIn_enc_policy(libtorrent.LibtorrentPe_settingsEnc_policy(config.encryption))
+    encryptionSettings.SetAllowed_enc_level(libtorrent.Pe_settingsBoth)
+    encryptionSettings.SetPrefer_rc4(true)
+    session.Set_pe_settings(encryptionSettings)
 
     startServices()
 
