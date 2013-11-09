@@ -1,0 +1,19 @@
+all: darwin windows
+
+darwin: force
+	$(MAKE) clean all
+
+linux: force
+	$(MAKE) clean all TARGET_OS=linux CROSS_PREFIX=x86_64-pc-linux CROSS_HOME=/usr/local/gcc-4.8.0-linux64
+
+linux_rpi: force
+	$(MAKE) clean all TARGET_OS=linux ARCH=arm CROSS_PREFIX=arm-linux-gnueabihf CROSS_HOME=/usr/local/gcc-linaro-arm-linux-gnueabihf-raspbian
+
+android: force
+	$(MAKE) clean all TARGET_OS=android ARCH=arm CROSS_PREFIX=arm-linux-androideabi CROSS_HOME=/usr/local/gcc-4.8.0-arm-linux-androideabi
+
+windows: force
+	$(MAKE) clean all TARGET_OS=windows CROSS_PREFIX=i586-mingw32 CROSS_HOME=/usr/local/gcc-4.8.0-mingw32
+
+force:
+	true
