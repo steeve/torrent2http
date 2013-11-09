@@ -136,9 +136,9 @@ func (tf *TorrentFile) Readdir(count int) (files []os.FileInfo, err error) {
 }
 
 func (tf *TorrentFile) pieceFromOffset(offset int64) (int, int) {
-    pieceLength := tf.tfs.ti.Piece_length()
-    piece := int(tf.Offset() + offset) / pieceLength
-    pieceOffset := int(tf.Offset() + offset) % pieceLength
+    pieceLength := int64(tf.tfs.ti.Piece_length())
+    piece := int((tf.Offset() + offset) / pieceLength)
+    pieceOffset := int((tf.Offset() + offset) % pieceLength)
     return piece, pieceOffset
 }
 
