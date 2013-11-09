@@ -9,7 +9,7 @@ import (
     "net/http"
     "log"
     "strings"
-    "./libtorrent-go"
+    "github.com/steeve/libtorrent-go"
 )
 
 const (
