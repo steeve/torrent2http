@@ -253,8 +253,8 @@ func main() {
         sessionSettings.SetMax_queued_disk_bytes(64 * 1024)
     }
     sessionSettings.SetConnection_speed(1000)
-    sessionSettings.SetRequest_timeout(1)
-    sessionSettings.SetPeer_connect_timeout(1)
+    sessionSettings.SetRequest_timeout(5)
+    sessionSettings.SetPeer_connect_timeout(2)
     if config.max_download_rate > 0 {
         sessionSettings.SetDownload_rate_limit(80 * 1024)
     }
