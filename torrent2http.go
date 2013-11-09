@@ -256,7 +256,7 @@ func main() {
     sessionSettings.SetRequest_timeout(5)
     sessionSettings.SetPeer_connect_timeout(2)
     if config.max_download_rate > 0 {
-        sessionSettings.SetDownload_rate_limit(80 * 1024)
+        sessionSettings.SetDownload_rate_limit(config.max_download_rate * 1024)
     }
     if config.max_upload_rate > 0 {
         sessionSettings.SetUpload_rate_limit(config.max_upload_rate * 1024)
