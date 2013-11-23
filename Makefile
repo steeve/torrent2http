@@ -34,6 +34,7 @@ else ifeq ($(TARGET_OS), linux)
 else ifeq ($(TARGET_OS), android)
 	EXT =
 	GOOS = linux
+	GOARM = 7
 endif
 
 NAME = torrent2http
@@ -69,11 +70,10 @@ endif
 $(BUILD_PATH):
 	mkdir -p $(BUILD_PATH)
 
-$(BUILD_PATH)/$(OUTPUT_NAME): $(BUILD_PATH) libtorrent-go force
-	CC=$(CC) GOOS=$(GOOS) GOARCH=$(GOARCH) GOARM=$(GOARM) CGO_ENABLED=$(CGO_ENABLED) $(GO) build -v -o $(BUILD_PATH)/$(OUTPUT_NAME) -ldflags="-extld=$(CC)"
+$(BUILD_PATH)/$(OUTPUT_NAME): $(BUILD_PATH) libtorrent-go
+	CC=$(CC) GOOS=$(GOOS) GOARCH=$(GOARCH) GOARM=$(GOARM) CGO_ENABLED=$(CGO_ENABLED) $(GO) build -v -o $(BUILD_PATH)/$(OUTPUT_NAME) -ldflags="-linkmode=external -extld=$(CC)"
 
 dist: $(BUILD_PATH)/$(OUTPUT_NAME)
-	find $(LIBTORRENT_GO_HOME)/$(BUILD_PATH)/bin/ -type f -exec cp {} $(BUILD_PATH) \;
 
 clean:
 	cd $(LIBTORRENT_GO_HOME) && $(MAKE) $(MFLAGS) clean
