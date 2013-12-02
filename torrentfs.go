@@ -202,9 +202,7 @@ func (tf *TorrentFile) Name() string {
 
 func (tf *TorrentFile) Size() int64 {
     if tf.fe != nil {
-        var ret int64
-        tf.fe.Get_size2(&ret)
-        return ret
+        return tf.fe.GetSize()
     }
     return tf.stat.Size()
 }
@@ -233,9 +231,7 @@ func (tf *TorrentFile) Sys() interface{} {
 
 // Specific to libtorrent
 func (tf *TorrentFile) Offset() int64 {
-    var ret int64
-    tf.fe.Get_offset2(&ret)
-    return ret
+    return tf.fe.GetOffset()
 }
 
 func (tf *TorrentFile) Pieces() (int, int) {
