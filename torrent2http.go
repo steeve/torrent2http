@@ -13,6 +13,7 @@ import (
     "github.com/steeve/libtorrent-go"
     "runtime"
     "fmt"
+    "time"
 )
 
 type FileStatusInfo struct {
@@ -287,8 +288,6 @@ func main() {
 
     instance.torrentFS = NewTorrentFS(instance.torrentHandle)
 
-    go startHTTP()
-
     // Handle SIGTERM (Ctrl-C)
     go func() {
         signalChan := make(chan os.Signal, 1)
@@ -296,6 +295,20 @@ func main() {
         <- signalChan
         go shutdown()
     }()
+
+    // Handle self-killing when the parent dies
+    go func () {
+        for {
+            // did the parent die? shutdown!
+            if os.Getppid() == 1 {
+                go shutdown()
+                break
+            }
+            time.Sleep(1 * time.Second)
+        }
+    }()
+
+    go startHTTP()
 
     for f := range mainFuncChan {
         f()
