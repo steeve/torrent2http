@@ -167,8 +167,6 @@ func shutdown() {
 
         if instance.config.keepFiles == false {
             instance.session.Set_alert_mask(libtorrent.AlertStorage_notification)
-            // Just in case
-            defer removeFiles()
             instance.session.Remove_torrent(instance.torrentHandle, 1);
             log.Println("Waiting for files to be removed...")
             for {
@@ -179,6 +177,8 @@ func shutdown() {
                     break
                 }
             }
+            // Just in case
+            removeFiles()
         }
 
         log.Println("Bye bye")
