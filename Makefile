@@ -47,7 +47,7 @@ CGO_ENABLED = 1
 OUTPUT_NAME = $(NAME)$(EXT)
 BUILD_PATH = build/$(TARGET_OS)_$(TARGET_ARCH)
 LIBTORRENT_GO = github.com/steeve/libtorrent-go
-LIBTORRENT_GO_HOME = $(GOPATH)/src/$(LIBTORRENT_GO)
+LIBTORRENT_GO_HOME = $(shell go env GOPATH)/src/$(LIBTORRENT_GO)
 
 
 all: clean libtorrent-go dist
@@ -91,7 +91,7 @@ vendor_libs_android:
 vendor_libs_linux:
 
 vendor_libs_windows:
-	cp -f $(GOPATH)/src/github.com/steeve/libtorrent-go/$(BUILD_PATH)/* $(BUILD_PATH)
+	cp -f $(shell go env GOPATH)/src/github.com/steeve/libtorrent-go/$(BUILD_PATH)/* $(BUILD_PATH)
 
 dist: $(BUILD_PATH)/$(OUTPUT_NAME) vendor_libs_$(TARGET_OS)
 
