@@ -215,8 +215,6 @@ func configureSession() {
     settings.SetAnnounce_to_all_trackers(true)
     settings.SetAnnounce_to_all_tiers(true)
     settings.SetConnection_speed(500)
-    settings.SetConnections_limit(400)
-    settings.SetNum_want(200)
     if instance.config.maxDownloadRate > 0 {
         settings.SetDownload_rate_limit(instance.config.maxDownloadRate * 1024)
     }
