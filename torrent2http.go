@@ -46,6 +46,7 @@ type Config struct {
     keepFiles           bool
     encryption          int
     noSparseFile        bool
+    filePath            string
 }
 
 type Instance struct {
@@ -196,9 +197,10 @@ func parseFlags() {
     flag.BoolVar(&config.keepFiles, "keep", false, "Keep files after exiting")
     flag.BoolVar(&config.noSparseFile, "no-sparse", false, "Do not use sparse file allocation.")
     flag.IntVar(&config.encryption, "encryption", 1, "Encryption: 0=forced 1=enabled (default) 2=disabled")
+    flag.StringVar(&config.filePath, "file", "", "Torrent file path")
     flag.Parse()
 
-    if config.magnetUri == "" {
+    if config.magnetUri == "" && config.filePath == "" {
         flag.Usage();
         os.Exit(1)
     }
@@ -269,8 +271,16 @@ func main() {
 
     startServices()
 
-    log.Println("Parsing magnet link")
-    torrentParams := libtorrent.Parse_magnet_uri2(instance.config.magnetUri)
+    torrentParams := libtorrent.NewAdd_torrent_params()
+
+    if (instance.config.magnetUri != "") {
+        log.Println("Parsing magnet/torrent link")
+        torrentParams.SetUrl(instance.config.magnetUri)
+    } else {
+        log.Println("Loading torrent file")
+        torrentInfo := libtorrent.NewTorrent_info(instance.config.filePath)
+        torrentParams.SetTi(torrentInfo)
+    }
 
     log.Println("Setting save path")
     torrentParams.SetSave_path(instance.config.downloadPath)
@@ -286,7 +296,7 @@ func main() {
     log.Println("Enabling sequential download")
     instance.torrentHandle.Set_sequential_download(true)
 
-    log.Printf("Downloading: %s\n", torrentParams.GetName())
+    log.Printf("Downloading: %s\n", instance.torrentHandle.Name())
 
     instance.torrentFS = NewTorrentFS(instance.torrentHandle)
 
