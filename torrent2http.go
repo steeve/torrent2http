@@ -38,7 +38,7 @@ type SessionStatus struct {
 }
 
 type Config struct {
-    magnetUri           string
+    uri                 string
     bindAddress         string
     maxUploadRate       int
     maxDownloadRate     int
@@ -188,7 +188,7 @@ func shutdown() {
 
 func parseFlags() {
     config := Config{}
-    flag.StringVar(&config.magnetUri, "magnet", "", "Magnet URI")
+    flag.StringVar(&config.uri, "uri", "", "Magnet URI or .torrent file URL")
     flag.StringVar(&config.bindAddress, "bind", ":5001", "Bind address of torrent2http")
     flag.IntVar(&config.maxDownloadRate, "dlrate", 0, "Max Download Rate")
     flag.IntVar(&config.maxUploadRate, "ulrate", 0, "Max Upload Rate")
@@ -198,7 +198,7 @@ func parseFlags() {
     flag.IntVar(&config.encryption, "encryption", 1, "Encryption: 0=forced 1=enabled (default) 2=disabled")
     flag.Parse()
 
-    if config.magnetUri == "" {
+    if config.uri == "" {
         flag.Usage();
         os.Exit(1)
     }
@@ -269,8 +269,9 @@ func main() {
 
     startServices()
 
-    log.Println("Parsing magnet link")
-    torrentParams := libtorrent.Parse_magnet_uri2(instance.config.magnetUri)
+    log.Println("Fetching link")
+    torrentParams := libtorrent.NewAdd_torrent_params()
+    torrentParams.SetUrl(instance.config.uri)
 
     log.Println("Setting save path")
     torrentParams.SetSave_path(instance.config.downloadPath)
@@ -286,7 +287,7 @@ func main() {
     log.Println("Enabling sequential download")
     instance.torrentHandle.Set_sequential_download(true)
 
-    log.Printf("Downloading: %s\n", torrentParams.GetName())
+    log.Printf("Downloading: %s\n", instance.torrentHandle.Name())
 
     instance.torrentFS = NewTorrentFS(instance.torrentHandle)
 
