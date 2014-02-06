@@ -30,6 +30,7 @@ type LsInfo struct {
 }
 
 type SessionStatus struct {
+    Name            string  `json:"name"`
     State           int     `json:"state"`
     Progress        float32 `json:"progress"`
     DownloadRate    float32 `json:"download_rate"`
@@ -83,6 +84,7 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
         runInMainThread(func() {
             tstatus := instance.torrentHandle.Status()
             status = SessionStatus{
+                Name: instance.torrentHandle.Name(),
                 State: int(tstatus.GetState()),
                 Progress: tstatus.GetProgress(),
                 DownloadRate: float32(tstatus.GetDownload_rate()) / 1000,
