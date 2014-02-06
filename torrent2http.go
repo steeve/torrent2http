@@ -14,6 +14,7 @@ import (
     "runtime"
     "fmt"
     "time"
+    "net/url"
 )
 
 type FileStatusInfo struct {
@@ -269,9 +270,20 @@ func main() {
 
     startServices()
 
-    log.Println("Fetching link")
     torrentParams := libtorrent.NewAdd_torrent_params()
-    torrentParams.SetUrl(instance.config.uri)
+
+    fileUri, err := url.Parse(instance.config.uri)
+    if err != nil {
+        log.Fatal(err)
+    }
+    if fileUri.Scheme == "file" {
+        log.Printf("Opening local file %s\n", fileUri.Path)
+        torrentInfo := libtorrent.NewTorrent_info(fileUri.Path)
+        torrentParams.SetTi(torrentInfo)
+    } else {
+        log.Println("Fetching link")
+        torrentParams.SetUrl(instance.config.uri)
+    }
 
     log.Println("Setting save path")
     torrentParams.SetSave_path(instance.config.downloadPath)
