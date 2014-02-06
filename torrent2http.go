@@ -253,14 +253,12 @@ func main() {
     // Make sure we are properly multithreaded, on a minimum of 2 threads
     // because we lock the main thread for libtorrent.
     maxProcs := runtime.NumCPU()
-    if maxProcs < 2 {
-        maxProcs = 2
+    if maxProcs > 1 {
+        runtime.GOMAXPROCS(maxProcs)
+        // Lock the main thread.
+        runtime.LockOSThread()
+        defer runtime.UnlockOSThread()
     }
-    runtime.GOMAXPROCS(maxProcs)
-
-    // Lock the main thread.
-    runtime.LockOSThread()
-    defer runtime.UnlockOSThread()
 
     parseFlags()
 
