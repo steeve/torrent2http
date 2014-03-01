@@ -252,18 +252,87 @@ func configureSession() {
     instance.session.Set_pe_settings(encryptionSettings)
 }
 
+func NewConnectionCounterHandler(connTrackChannel chan int, handler http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        connTrackChannel <- 1
+        handler.ServeHTTP(w, r)
+        connTrackChannel <- -1
+    })
+}
+
+func inactiveAutoShutdown(connTrackChannel chan int) {
+    activeConnections := 0
+
+    for {
+        if activeConnections == 0 {
+            select {
+            case inc := <-connTrackChannel:
+                activeConnections += inc
+            case <-time.After(time.Duration(instance.config.idleTimeout) * time.Second):
+                go shutdown()
+            }
+        } else {
+            activeConnections += <-connTrackChannel
+        }
+    }
+}
+
 func startHTTP() {
     log.Println("Starting HTTP Server...")
-    http.HandleFunc("/status", statusHandler)
-    http.HandleFunc("/ls", lsHandler)
-    http.Handle("/files/", http.StripPrefix("/files/", http.FileServer(instance.torrentFS)))
-    http.HandleFunc("/shutdown", func (w http.ResponseWriter, r *http.Request) {
+
+    mux := http.NewServeMux()
+    mux.HandleFunc("/status", statusHandler)
+    mux.HandleFunc("/ls", lsHandler)
+    mux.Handle("/files/", http.StripPrefix("/files/", http.FileServer(instance.torrentFS)))
+    mux.Handle("/shutdown", http.HandlerFunc(func (w http.ResponseWriter, r *http.Request) {
         go shutdown()
         fmt.Fprintf(w, "OK")
-    })
+    }))
+
+    handler := http.Handler(mux)
+    if instance.config.idleTimeout > 0 {
+        connTrackChannel := make(chan int, 10)
+        handler = NewConnectionCounterHandler(connTrackChannel, mux)
+        go inactiveAutoShutdown(connTrackChannel)
+    }
 
     log.Printf("Listening HTTP on %s...\n", instance.config.bindAddress)
-    http.ListenAndServe(instance.config.bindAddress, nil)
+    http.ListenAndServe(instance.config.bindAddress, handler)
+}
+
+func watchParent() {
+    for {
+        // did the parent die? shutdown!
+        if os.Getppid() == 1 {
+            go shutdown()
+            break
+        }
+        time.Sleep(2 * time.Second)
+    }
+}
+
+// Handle SIGTERM (Ctrl-C)
+func handleSignals() {
+    signalChan := make(chan os.Signal, 1)
+    signal.Notify(signalChan, os.Interrupt, syscall.SIGTERM)
+    <- signalChan
+    go shutdown()
+}
+
+func ensureSeeding() {
+    log.Println("Starting seeding watcher")
+    for {
+        tstatus := instance.torrentHandle.Status()
+        if tstatus.GetIs_seeding() || tstatus.GetIs_finished() {
+            break
+        }
+        time.Sleep(1 * time.Second)
+    }
+    log.Println("Now seeding, setting priorities")
+    numPieces := instance.torrentFS.ti.Num_pieces()
+    for i := 0; i < numPieces; i++ {
+        instance.torrentHandle.Piece_priority(i, 1)
+    }
 }
 
 func main() {
@@ -278,14 +347,6 @@ func main() {
     }
 
     parseFlags()
-
-    log.Println("Starting BT engine...")
-    instance.session = libtorrent.NewSession()
-    instance.session.Listen_on(libtorrent.NewPair_int_int(6900, 6999))
-
-    configureSession()
-
-    startServices()
 
     torrentParams := libtorrent.NewAdd_torrent_params()
 
@@ -310,6 +371,13 @@ func main() {
         torrentParams.SetStorage_mode(libtorrent.Storage_mode_allocate)
     }
 
+    log.Println("Starting BT engine...")
+    instance.session = libtorrent.NewSession()
+    instance.session.Listen_on(libtorrent.NewPair_int_int(instance.config.portLower, instance.config.portUpper))
+
+    configureSession()
+    startServices()
+
     log.Println("Adding torrent")
     instance.torrentHandle = instance.session.Add_torrent(torrentParams)
 
@@ -320,27 +388,10 @@ func main() {
 
     instance.torrentFS = NewTorrentFS(instance.torrentHandle)
 
-    // Handle SIGTERM (Ctrl-C)
-    go func() {
-        signalChan := make(chan os.Signal, 1)
-        signal.Notify(signalChan, os.Interrupt, syscall.SIGTERM)
-        <- signalChan
-        go shutdown()
-    }()
-
-    // Handle self-killing when the parent dies
-    go func () {
-        for {
-            // did the parent die? shutdown!
-            if os.Getppid() == 1 {
-                go shutdown()
-                break
-            }
-            time.Sleep(1 * time.Second)
-        }
-    }()
-
+    go handleSignals()
+    go watchParent()
     go startHTTP()
+    // go ensureSeeding()
 
     for f := range mainFuncChan {
         f()
