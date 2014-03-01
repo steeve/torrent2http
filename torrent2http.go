@@ -223,17 +223,24 @@ func configureSession() {
     settings := instance.session.Settings()
 
     log.Println("Setting Session settings...")
+
+    settings.SetUser_agent("")
+
     settings.SetRequest_timeout(5)
     settings.SetPeer_connect_timeout(2)
     settings.SetAnnounce_to_all_trackers(true)
     settings.SetAnnounce_to_all_tiers(true)
-    settings.SetConnection_speed(500)
+    settings.SetConnection_speed(100)
     if instance.config.maxDownloadRate > 0 {
         settings.SetDownload_rate_limit(instance.config.maxDownloadRate * 1024)
     }
     if instance.config.maxUploadRate > 0 {
         settings.SetUpload_rate_limit(instance.config.maxUploadRate * 1024)
     }
+
+    settings.SetTorrent_connect_boost(100)
+    settings.SetRate_limit_ip_overhead(true)
+
     instance.session.Set_settings(settings)
 
     log.Println("Setting Encryption settings...")
