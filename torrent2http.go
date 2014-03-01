@@ -37,6 +37,8 @@ type SessionStatus struct {
     UploadRate      float32 `json:"upload_rate"`
     NumPeers        int     `json:"num_peers"`
     NumSeeds        int     `json:"num_seeds"`
+    TotalSeeds      int     `json:"total_seeds"`
+    TotalPeers      int     `json:"total_peers"`
 }
 
 type Config struct {
@@ -90,7 +92,9 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
                 DownloadRate: float32(tstatus.GetDownload_rate()) / 1000,
                 UploadRate: float32(tstatus.GetUpload_rate()) / 1000,
                 NumPeers: tstatus.GetNum_peers(),
-                NumSeeds: tstatus.GetNum_seeds()}
+                TotalPeers: tstatus.GetNum_incomplete(),
+                NumSeeds: tstatus.GetNum_seeds(),
+                TotalSeeds: tstatus.GetNum_complete()}
         })
     }
 
