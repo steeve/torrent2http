@@ -50,6 +50,9 @@ type Config struct {
     keepFiles           bool
     encryption          int
     noSparseFile        bool
+    idleTimeout         int
+    portLower           int
+    portUpper           int
 }
 
 type Instance struct {
@@ -203,6 +206,9 @@ func parseFlags() {
     flag.BoolVar(&config.keepFiles, "keep", false, "Keep files after exiting")
     flag.BoolVar(&config.noSparseFile, "no-sparse", false, "Do not use sparse file allocation.")
     flag.IntVar(&config.encryption, "encryption", 1, "Encryption: 0=forced 1=enabled (default) 2=disabled")
+    flag.IntVar(&config.idleTimeout, "max-idle", -1, "Automatically shutdown if no connection are active after a timeout.")
+    flag.IntVar(&config.portLower, "port-lower", 6900, "Lower bound for listen port.")
+    flag.IntVar(&config.portUpper, "port-upper", 6999, "Upper bound for listen port.")
     flag.Parse()
 
     if config.uri == "" {
