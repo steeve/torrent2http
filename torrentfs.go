@@ -143,7 +143,8 @@ func (tf *TorrentFile) pieceFromOffset(offset int64) (int, int) {
 }
 
 func (tf *TorrentFile) waitForPiece(piece int) {
-    for tf.tfs.th.Have_piece(piece) == false {
+    log.Printf("Waiting for piece %d\n", piece)
+    for tf.tfs.th.Piece_priority(piece).(int) > 0 && tf.tfs.th.Have_piece(piece) == false {
         time.Sleep(100 * time.Millisecond)
     }
 }
@@ -188,6 +189,16 @@ func (tf *TorrentFile) Seek(offset int64, whence int) (int64, error) {
             return offset, nil
         }
     }
+
+    // piece, _ := tf.pieceFromOffset(offset)
+    // startPiece, endPiece := tf.Pieces()
+    // for i := startPiece; i <= endPiece; i++ {
+    //     if i < piece {
+    //         tf.tfs.th.Piece_priority(i, 0)
+    //     } else {
+    //         tf.tfs.th.Piece_priority(i, 7)
+    //     }
+    // }
 
     return tf.fp.Seek(offset, whence)
 }
