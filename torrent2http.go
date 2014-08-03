@@ -132,6 +132,13 @@ func startServices() {
     log.Println("Starting DHT...")
     instance.session.Start_dht()
 
+    // add some *known* dht routers to speed up dht bootstrapping
+    instance.session.Add_dht_router(libtorrent.NewPair_str_int("router.bittorrent.com", 6881))
+    instance.session.Add_dht_router(libtorrent.NewPair_str_int("router.utorrent.com", 6881))
+    instance.session.Add_dht_router(libtorrent.NewPair_str_int("dht.transmissionbt.com", 6881))
+    instance.session.Add_dht_router(libtorrent.NewPair_str_int("dht.aelitis.com", 6881))
+
+
     log.Println("Starting LSD...")
     instance.session.Start_lsd()
 
